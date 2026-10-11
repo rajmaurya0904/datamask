@@ -1,5 +1,8 @@
 # DataMask
 
+> **Status: scaffold only.** The idea below is the plan, not what the code does yet — the package currently contains no implementation. Watch the repo if you want to know when it does something.
+
+
 Generates synthetic, GDPR‑compliant user datasets with configurable PII masking for testing privacy‑focused data pipelines.
 
 ## Install
