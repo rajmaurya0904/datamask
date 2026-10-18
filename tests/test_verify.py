@@ -134,3 +134,22 @@ def test_k_anonymity_input_validation() -> None:
         check_k_anonymity(PEOPLE, ["nope"], k=2)
     with pytest.raises(DatamaskError, match="no rows"):
         check_k_anonymity(Table(["a"], []), ["a"], k=2)
+
+
+def test_common_values_are_not_reported_as_reappearing() -> None:
+    names = ["Johnson"] * 30 + ["Rareson"]
+    original = Table(["surname", "email"], [{"surname": n, "email": "x"} for n in names])
+    masked = Table(
+        ["surname", "email"],
+        [{"surname": "h", "email": f"{n.lower()}.a@mail.example"} for n in names],
+    )
+    report = check_leaks(original, masked, ["surname"])
+    assert report.reappearing == 1  # only the rare surname
+    assert any("occur in more than 20 rows" in note for note in report.notes)
+    strict = check_leaks(original, masked, ["surname"], common_threshold=1000)
+    assert strict.reappearing == 31
+
+
+def test_common_values_are_still_checked_for_being_unchanged() -> None:
+    table = Table(["surname"], [{"surname": "Johnson"}] * 30)
+    assert check_leaks(table, table, ["surname"]).unchanged == 30
