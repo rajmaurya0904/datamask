@@ -13,6 +13,7 @@ from .tableio import Table
 MIN_VALUE_LENGTH = 4
 SUBSTRING_MIN_LENGTH = 6
 MAX_LOCATIONS = 20
+COMMON_THRESHOLD = 20
 
 
 @dataclass
@@ -42,6 +43,7 @@ def check_leaks(
     masked: Table,
     columns: Iterable[str],
     min_length: int = MIN_VALUE_LENGTH,
+    common_threshold: int = COMMON_THRESHOLD,
 ) -> LeakReport:
     """Look for each row's own original values of ``columns`` in the same masked row.
 
@@ -52,6 +54,11 @@ def check_leaks(
     than ``min_length`` are skipped because short strings occur by chance. Rows are
     compared by position, so both tables must keep their row order. A value that merely
     equals some *other* person's original value is not a leak and is not reported.
+
+    A value that occurs in more than ``common_threshold`` rows of its column ("Smith",
+    "London") is too common to identify anyone, so it is skipped for the ``reappears``
+    check (a pseudonymised email containing "smith" is not a leak). It is still checked
+    for ``unchanged``.
     """
     wanted = list(dict.fromkeys(columns))
     missing = [c for c in wanted if c not in original.columns]
@@ -63,6 +70,11 @@ def check_leaks(
             "verify compares rows by position"
         )
     report = LeakReport(checked_columns=wanted)
+    frequency = {
+        col: Counter(text_of(v).casefold() for v in original.column(col) if not is_empty(v))
+        for col in wanted
+    }
+    common_skipped = 0
     for index, (before, after) in enumerate(zip(original.rows, masked.rows, strict=True), start=1):
         out_text = {
             col: text_of(after[col]).casefold()
@@ -75,10 +87,15 @@ def check_leaks(
                 continue
             needle = text_of(raw).casefold()
             report.values_checked += 1
+            common = frequency[source][needle] > common_threshold
+            if common:
+                common_skipped += 1
             for out_col, cell in out_text.items():
                 same_cell = out_col == source
                 if same_cell:
                     hit = cell == needle
+                elif common:
+                    continue
                 else:
                     hit = cell == needle or (
                         len(needle) >= SUBSTRING_MIN_LENGTH and needle in cell
@@ -92,6 +109,11 @@ def check_leaks(
                 if len(report.leaks) < MAX_LOCATIONS:
                     kind = "unchanged" if same_cell else "reappears"
                     report.leaks.append(Leak(kind, source, out_col, index))
+    if common_skipped:
+        report.notes.append(
+            f"{common_skipped} value(s) occur in more than {common_threshold} rows of their "
+            "column and were only checked for being left unchanged, not for reappearing"
+        )
     return report
 
 

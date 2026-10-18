@@ -100,6 +100,9 @@ def build_parser() -> argparse.ArgumentParser:
     ver.add_argument("--columns", help="comma-separated columns to check")
     ver.add_argument("--auto", action="store_true", help="check the columns scan detects")
     ver.add_argument("--min-length", type=int, default=4, help="ignore shorter values (default 4)")
+    ver.add_argument("--common-threshold", type=int, default=20,
+                     help="values in more rows than this are too common to count as "
+                          "reappearing (default 20)")
     ver.add_argument("--format", choices=FORMATS, default=None, help="format of both files")
 
     kc = sub.add_parser("kcheck", help="k-anonymity of a file over quasi-identifier columns")
@@ -246,11 +249,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
     columns = list(dict.fromkeys(columns))
     if not columns:
         raise DatamaskError("nothing to verify: pass --columns, --config, --rule or --auto")
-    report = check_leaks(original, masked, columns, min_length=args.min_length)
+    report = check_leaks(
+        original, masked, columns, min_length=args.min_length,
+        common_threshold=args.common_threshold,
+    )
     print(f"checked {len(report.checked_columns)} column(s): {', '.join(report.checked_columns)}")
-    print(f"distinct original values checked: {report.values_checked}")
-    print(f"cells left unchanged:             {report.unchanged}")
-    print(f"values reappearing elsewhere:     {report.reappearing}")
+    print(f"original values checked (per row): {report.values_checked}")
+    print(f"cells left unchanged:            {report.unchanged}")
+    print(f"values reappearing in the row:   {report.reappearing}")
     for leak in report.leaks:
         where = f"column {leak.output_column!r}"
         if leak.kind == "reappears":
