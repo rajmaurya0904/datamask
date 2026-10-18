@@ -237,7 +237,7 @@ def parse_date(text: str) -> date:
             return datetime.strptime(text, fmt).date()
         except ValueError:
             continue
-    raise ValueError(f"unrecognised date {text!r}")
+    raise ValueError("unrecognised date")
 
 
 class DateGeneralize(Strategy):

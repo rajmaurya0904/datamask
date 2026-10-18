@@ -126,11 +126,11 @@ class Masker:
                 continue
             try:
                 new = strategy.apply(value, self.ctx)
-            except (ValueError, TypeError) as exc:
+            except (ValueError, TypeError):
                 if self.on_error == "fail":
                     raise DatamaskError(
                         f"column {col.column!r}, data row {index}: the {strategy.name} "
-                        f"strategy cannot handle this value ({exc}); value not shown"
+                        f"strategy cannot handle this value (value not shown)"
                     ) from None
                 col.failed += 1
                 out.append(None)
