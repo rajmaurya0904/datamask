@@ -73,12 +73,28 @@ def test_report_never_contains_the_values() -> None:
     assert "ann@corp.com" not in repr(report)
 
 
-def test_large_value_sets_fall_back_to_exact_matching_with_a_note() -> None:
-    rows = [{"v": f"value-{i:05d}"} for i in range(2100)]
-    table = Table(["v"], rows)
+def test_another_persons_value_is_not_a_leak() -> None:
+    original = Table(["name", "note"], [
+        {"name": "Oliver Smith", "note": "a"},
+        {"name": "Grace Hall", "note": "b"},
+    ])
+    masked = Table(["name", "note"], [
+        {"name": "Grace Hall", "note": "a"},  # pseudonym that equals another row's original
+        {"name": "Oliver Smith", "note": "b"},
+    ])
+    assert check_leaks(original, masked, ["name"]).ok
+
+
+def test_comparison_ignores_case() -> None:
+    original = Table(["name", "note"], [{"name": "Oliver Smith", "note": "x"}])
+    masked = Table(["name", "note"], [{"name": "h1", "note": "ask OLIVER SMITH"}])
+    assert check_leaks(original, masked, ["name"]).reappearing == 1
+
+
+def test_values_are_counted_per_row() -> None:
+    table = Table(["v"], [{"v": f"value-{i:05d}"} for i in range(50)])
     report = check_leaks(table, table, ["v"])
-    assert any("substring search covered only" in n for n in report.notes)
-    assert report.unchanged == 2100
+    assert report.values_checked == 50 and report.unchanged == 50
 
 
 PEOPLE = Table(
