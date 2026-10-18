@@ -13,6 +13,7 @@ import unicodedata
 import uuid
 from collections.abc import Iterator, Sequence
 from datetime import date, timedelta
+from functools import lru_cache
 from typing import Any
 
 from .checks import iban_check_digits, luhn_check_digit
@@ -43,9 +44,8 @@ def slugify(text: str) -> str:
     return "".join(c for c in folded if c.isalnum())
 
 
-def parse_locales(spec: str | Sequence[str]) -> list[Locale]:
-    names = [s.strip().lower() for s in spec.split(",")] if isinstance(spec, str) else list(spec)
-    names = [n for n in names if n]
+@lru_cache(maxsize=64)
+def _locales_for(names: tuple[str, ...]) -> tuple[Locale, ...]:
     if not names:
         raise DatamaskError("at least one locale is required")
     out: list[Locale] = []
@@ -55,7 +55,12 @@ def parse_locales(spec: str | Sequence[str]) -> list[Locale]:
                 f"unknown locale {name!r} (available: {', '.join(sorted(LOCALES))})"
             )
         out.append(LOCALES[name])
-    return out
+    return tuple(out)
+
+
+def parse_locales(spec: str | Sequence[str]) -> list[Locale]:
+    names = [s.strip().lower() for s in spec.split(",")] if isinstance(spec, str) else list(spec)
+    return list(_locales_for(tuple(n for n in names if n)))
 
 
 def parse_fields(spec: str | Sequence[str] | None) -> tuple[str, ...]:
@@ -197,6 +202,40 @@ class Generator:
             "marketing_consent": consent,
             "consent_date": consent_date.isoformat() if consent_date else None,
         }
+
+    def field(self, name: str) -> Any:
+        """Generate just one field, without building a whole person (much cheaper)."""
+        loc = self.rng.choice(self.locales)
+        if name == "id":
+            return self.uuid()
+        if name == "first_name":
+            return self.first_name(loc)
+        if name == "last_name":
+            return self.last_name(loc)
+        if name == "full_name":
+            return f"{self.first_name(loc)} {self.last_name(loc)}"
+        if name == "email":
+            return self.email(self.first_name(loc), self.last_name(loc))
+        if name == "phone":
+            return self.phone(loc)
+        if name == "dob":
+            return self.dob().isoformat()
+        if name in {"street", "city", "postcode"}:
+            line, city, postcode = self.address(loc)
+            return {"street": line, "city": city, "postcode": postcode}[name]
+        if name == "country":
+            return loc.country
+        if name == "national_id":
+            return self.national_id(loc, self.dob(), self.address(loc)[2])
+        if name == "iban":
+            return self.iban(loc)
+        if name == "card_number":
+            return self.card_number()
+        if name == "ip_address":
+            return self.ip_address()
+        if name == "occupation":
+            return self.rng.choice(OCCUPATIONS)
+        return self.person()[name]
 
     def rows(self, count: int, fields: Sequence[str] = DEFAULT_FIELDS) -> Iterator[dict[str, Any]]:
         if count < 0:

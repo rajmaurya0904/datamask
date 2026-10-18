@@ -247,13 +247,19 @@ class Pseudonym(Strategy):
     def apply(self, value: Any, ctx: Context) -> Any:
         kind = self.options["kind"]
         text = text_of(value)
-        seed = int.from_bytes(ctx.digest(f"pseudonym:{kind}", text), "big")
-        gen = Generator(seed=seed, locales=self.options["locale"])
-        person = gen.person()
-        if kind == "email":
-            local, _, domain = person["email"].partition("@")
-            return f"{local}{gen.rng.randint(10, 9999)}@{domain}"
-        return person[kind]
+        result: Any = text
+        # Never map a value to itself: retry with a different derived seed if that happens.
+        for attempt in range(8):
+            label = f"pseudonym:{kind}" if attempt == 0 else f"pseudonym:{kind}:{attempt}"
+            seed = int.from_bytes(ctx.digest(label, text), "big")
+            gen = Generator(seed=seed, locales=self.options["locale"])
+            result = gen.field(kind)
+            if kind == "email":
+                local, _, domain = result.partition("@")
+                result = f"{local}{gen.rng.randint(10, 9999)}@{domain}"
+            if text_of(result) != text:
+                break
+        return result
 
 
 _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y", "%Y/%m/%d")
