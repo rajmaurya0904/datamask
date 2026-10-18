@@ -19,7 +19,6 @@ class Locale:
     last_names: tuple[str, ...]
     streets: tuple[str, ...]
     cities: tuple[tuple[str, str], ...]  # (city, postcode prefix)
-    street_first: bool  # "12 Oak Road" (True) versus "Eichenweg 12" (False)
 
 
 EN = Locale(
@@ -47,7 +46,6 @@ EN = Locale(
         ("Glasgow", "G"), ("Bristol", "BS"), ("Sheffield", "S"), ("Liverpool", "L"),
         ("Cardiff", "CF"), ("Edinburgh", "EH"), ("Nottingham", "NG"), ("Newcastle", "NE"),
     ),
-    street_first=False,
 )
 
 DE = Locale(
@@ -73,7 +71,6 @@ DE = Locale(
         ("Frankfurt am Main", "60"), ("Stuttgart", "70"), ("Düsseldorf", "40"),
         ("Leipzig", "04"), ("Dresden", "01"), ("Hannover", "30"), ("Bremen", "28"),
     ),
-    street_first=True,
 )
 
 FR = Locale(
@@ -99,7 +96,6 @@ FR = Locale(
         ("Nice", "06"), ("Nantes", "44"), ("Strasbourg", "67"), ("Montpellier", "34"),
         ("Bordeaux", "33"), ("Lille", "59"), ("Rennes", "35"),
     ),
-    street_first=True,
 )
 
 LOCALES: dict[str, Locale] = {loc.code: loc for loc in (EN, DE, FR)}
