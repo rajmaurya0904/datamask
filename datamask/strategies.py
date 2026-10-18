@@ -17,6 +17,7 @@ import ipaddress
 import json
 import random
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, ClassVar
@@ -71,6 +72,15 @@ class Strategy:
 
     def apply(self, value: Any, ctx: Context) -> Any:  # pragma: no cover - interface
         raise NotImplementedError
+
+    def apply_in_row(self, value: Any, row: Mapping[str, Any], ctx: Context) -> Any:
+        """Like ``apply`` but with the row's original values available."""
+        return self.apply(value, ctx)
+
+    @property
+    def references(self) -> list[str]:
+        """Other columns whose original values this strategy reads."""
+        return []
 
     def apply_column(self, values: list[Any], ctx: Context) -> list[Any]:
         return [v if is_empty(v) else self.apply(v, ctx) for v in values]
@@ -177,8 +187,11 @@ class Email(Strategy):
 
 class Scrub(Strategy):
     name = "scrub"
-    summary = "keep free text but replace emails, IPs, cards, IBANs and phones with tokens"
-    params = {"kinds": (str, "+".join(KINDS))}
+    summary = (
+        "keep free text but replace emails, IPs, cards, IBANs, phones and, with also=, "
+        "the row's own values from other columns"
+    )
+    params = {"kinds": (str, "+".join(KINDS)), "also": (str, "")}
 
     def validate(self) -> None:
         wanted = [k for k in self.options["kinds"].split("+") if k]
@@ -190,8 +203,28 @@ class Scrub(Strategy):
             )
         self.options["kinds"] = "+".join(wanted)
 
+    @property
+    def references(self) -> list[str]:
+        return [c for c in self.options["also"].split("+") if c]
+
     def apply(self, value: Any, ctx: Context) -> Any:
         return scrub_text(text_of(value), tuple(self.options["kinds"].split("+")))
+
+    def apply_in_row(self, value: Any, row: Mapping[str, Any], ctx: Context) -> Any:
+        text = self.apply(value, ctx)
+        for column in self.references:
+            original = row.get(column)
+            if is_empty(original):
+                continue
+            full = text_of(original).strip()
+            words = [w for w in re.split(r"\s+", full) if len(w) >= 3] if " " in full else []
+            token = f"[{column.upper()}]"
+            for needle in sorted({full, *words}, key=len, reverse=True):
+                if len(needle) >= 2:
+                    text = re.sub(
+                        rf"(?<!\w){re.escape(needle)}(?!\w)", token, text, flags=re.IGNORECASE
+                    )
+        return text
 
 
 class Pseudonym(Strategy):

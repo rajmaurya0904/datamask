@@ -128,3 +128,23 @@ def test_non_string_json_values_are_masked() -> None:
     out, _ = Masker(rules(n="bucket:width=10", flag="hash"), salt=SALT).mask(table)
     assert out.rows[0]["n"] == "40-49"
     assert isinstance(out.rows[0]["flag"], str)
+
+
+def test_scrub_also_removes_the_rows_own_names() -> None:
+    table = Table(
+        ["name", "notes"],
+        [
+            {"name": "Paul Klein", "notes": "Paul called, mr klein wants a refund"},
+            {"name": "Ann Lee", "notes": "nothing about Paul here"},
+        ],
+    )
+    rules_ = {"name": build_strategy("hash"), "notes": build_strategy("scrub:also=name")}
+    out, _ = Masker(rules_, salt=SALT).mask(table)
+    assert out.rows[0]["notes"] == "[NAME] called, mr [NAME] wants a refund"
+    assert out.rows[1]["notes"] == "nothing about Paul here"
+
+
+def test_scrub_also_must_name_an_existing_column() -> None:
+    table = Table(["notes"], [{"notes": "hi"}])
+    with pytest.raises(DatamaskError, match="refers to column"):
+        Masker({"notes": build_strategy("scrub:also=name")}, salt=SALT).mask(table)

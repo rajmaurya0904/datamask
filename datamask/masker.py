@@ -71,6 +71,13 @@ class Masker:
             )
         if missing:
             self.warnings.append(f"rule(s) for missing column(s) skipped: {', '.join(missing)}")
+        for rule_column, rule in self.rules.items():
+            absent = [c for c in rule.references if c not in table.columns]
+            if absent:
+                raise DatamaskError(
+                    f"rule for {rule_column!r} refers to column(s) not in the input: "
+                    f"{', '.join(absent)}"
+                )
         resolved: dict[str, Strategy] = {}
         for column in table.columns:
             rule = self.rules.get(column, self.default)
@@ -101,14 +108,18 @@ class Masker:
                 continue
             originals = [row.get(column) for row in out_rows]
             col_report = ColumnReport(column, strategy.name)
-            masked = self._apply(strategy, originals, col_report)
+            masked = self._apply(strategy, originals, col_report, table.rows)
             for row, new in zip(out_rows, masked, strict=True):
                 row[column] = new
             report.columns.append(col_report)
         return Table(kept_columns, out_rows), report
 
     def _apply(
-        self, strategy: Strategy, originals: list[object], col: ColumnReport
+        self,
+        strategy: Strategy,
+        originals: list[object],
+        col: ColumnReport,
+        source_rows: list[dict[str, object]],
     ) -> list[object]:
         if strategy.column_wise:
             result = strategy.apply_column(list(originals), self.ctx)
@@ -119,13 +130,13 @@ class Masker:
                     col.changed += 1
             return result
         out: list[object] = []
-        for index, value in enumerate(originals, start=1):
+        for index, (value, source) in enumerate(zip(originals, source_rows, strict=True), start=1):
             if is_empty(value):
                 col.empty += 1
                 out.append(value)
                 continue
             try:
-                new = strategy.apply(value, self.ctx)
+                new = strategy.apply_in_row(value, source, self.ctx)
             except (ValueError, TypeError):
                 if self.on_error == "fail":
                     raise DatamaskError(
