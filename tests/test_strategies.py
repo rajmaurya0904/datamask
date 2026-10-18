@@ -209,3 +209,22 @@ def test_text_of_and_is_empty() -> None:
     assert text_of(True) == "true"
     assert text_of({"b": 1, "a": 2}) == '{"a": 2, "b": 1}'
     assert is_empty(None) and is_empty("") and not is_empty(0)
+
+
+def test_scrub_replaces_embedded_pii_and_keeps_the_rest() -> None:
+    out = run("scrub", "Customer ann@mail.example called from +44 7700 900123 about order 42")
+    assert out == "Customer [EMAIL] called from [PHONE] about order 42"
+
+
+def test_scrub_kinds_subset() -> None:
+    out = run("scrub:kinds=email", "ann@mail.example from 203.0.113.9")
+    assert out == "[EMAIL] from 203.0.113.9"
+
+
+def test_scrub_rejects_unknown_kinds() -> None:
+    with pytest.raises(DatamaskError, match="scrub"):
+        build_strategy("scrub:kinds=email+dna")
+
+
+def test_drop_is_registered() -> None:
+    assert build_strategy("drop").name == "drop"
