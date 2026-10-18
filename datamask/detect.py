@@ -221,15 +221,16 @@ def scan_table(table: Table) -> list[Finding]:
         found = classify_column(column, table.column(column))
         if found is not None:
             findings.append(found)
-    names = [
+    echoed = [
         f.column for f in findings
-        if f.kind in {"first_name", "last_name", "full_name"} and f.confidence >= APPLY_THRESHOLD
+        if f.kind in {"first_name", "last_name", "full_name", "street", "postcode"}
+        and f.confidence >= APPLY_THRESHOLD
     ]
-    if names:
-        # Prose often repeats the person's name; tell scrub to strip this row's own values.
+    if echoed:
+        # Prose often repeats a name or address; have scrub strip this row's own values.
         for f in findings:
             if f.kind == "free_text":
-                f.strategy = f"scrub:also={'+'.join(names)}"
+                f.strategy = f"scrub:also={'+'.join(echoed)}"
     return findings
 
 

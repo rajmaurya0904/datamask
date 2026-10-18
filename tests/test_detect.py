@@ -136,3 +136,12 @@ def test_scan_points_scrub_at_the_name_columns() -> None:
     )
     by_col = {f.column: f for f in scan_table(table)}
     assert by_col["notes"].strategy == "scrub:also=full_name"
+
+
+def test_scrub_also_covers_address_columns() -> None:
+    table = Table(
+        ["name", "postcode", "notes"],
+        [{"name": "Ann Lee", "postcode": "EC1A 1BB", "notes": "ring 07700 900123 re EC1A 1BB"}],
+    )
+    by_col = {f.column: f for f in scan_table(table)}
+    assert by_col["notes"].strategy == "scrub:also=name+postcode"
