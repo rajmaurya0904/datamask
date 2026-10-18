@@ -135,3 +135,22 @@ def test_slugify_transliterates_umlauts_and_accents() -> None:
     assert slugify("Müller") == "mueller"
     assert slugify("Éloïse") == "eloise"
     assert slugify("Straße") == "strasse"
+
+
+def test_field_generates_every_kind_with_the_right_shape() -> None:
+    gen = Generator(seed=5, locales="en,de,fr")
+    for name in ALL_FIELDS:
+        value = gen.field(name)
+        if name == "consent_date":
+            assert value is None or isinstance(value, str)
+        else:
+            assert value not in ("", None), name
+    assert luhn_valid(gen.field("card_number"))
+    assert iban_valid(gen.field("iban"))
+    assert "@" in gen.field("email")
+    assert " " in gen.field("full_name")
+
+
+def test_field_is_reproducible() -> None:
+    a = [Generator(seed=3).field("last_name") for _ in range(3)]
+    assert a[0] == a[1] == a[2]

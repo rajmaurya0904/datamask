@@ -228,3 +228,13 @@ def test_scrub_rejects_unknown_kinds() -> None:
 
 def test_drop_is_registered() -> None:
     assert build_strategy("drop").name == "drop"
+
+
+@pytest.mark.parametrize("kind", ["first_name", "last_name", "country", "occupation"])
+def test_pseudonym_never_maps_a_value_to_itself(kind: str) -> None:
+    from datamask.generate import Generator
+
+    spec = build_strategy(f"pseudonym:kind={kind}")
+    # Feed the strategy its own possible outputs: small vocabularies would collide often.
+    pool = {Generator(seed=i).field(kind) for i in range(300)}
+    assert all(spec.apply(v, CTX) != v for v in pool)
