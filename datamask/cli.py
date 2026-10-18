@@ -235,9 +235,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
     columns: list[str] = []
     if args.columns:
         columns.extend(c.strip() for c in args.columns.split(",") if c.strip())
-    columns.extend(c for c, s in config.rules.items() if s.name not in {"keep", "shuffle"})
+    # keep/shuffle leave values in place on purpose; scrub columns hold prose, not identifiers.
+    skipped = {"keep", "shuffle", "scrub"}
+    columns.extend(c for c, s in config.rules.items() if s.name not in skipped)
     if args.auto:
-        columns.extend(suggest_rules(original))
+        columns.extend(
+            c for c, spec in suggest_rules(original).items()
+            if build_strategy(spec).name not in skipped
+        )
     columns = list(dict.fromkeys(columns))
     if not columns:
         raise DatamaskError("nothing to verify: pass --columns, --config, --rule or --auto")
