@@ -221,6 +221,15 @@ def scan_table(table: Table) -> list[Finding]:
         found = classify_column(column, table.column(column))
         if found is not None:
             findings.append(found)
+    names = [
+        f.column for f in findings
+        if f.kind in {"first_name", "last_name", "full_name"} and f.confidence >= APPLY_THRESHOLD
+    ]
+    if names:
+        # Prose often repeats the person's name; tell scrub to strip this row's own values.
+        for f in findings:
+            if f.kind == "free_text":
+                f.strategy = f"scrub:also={'+'.join(names)}"
     return findings
 
 

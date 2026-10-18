@@ -127,3 +127,12 @@ def test_suggest_rules_applies_threshold() -> None:
 def test_sampling_handles_large_columns() -> None:
     values = [f"user{i}@x.org" for i in range(5000)]
     assert classify_column("email", values).kind == "email"
+
+
+def test_scan_points_scrub_at_the_name_columns() -> None:
+    table = Table(
+        ["full_name", "notes"],
+        [{"full_name": "Ann Lee", "notes": "ring ann@mail.example today"}],
+    )
+    by_col = {f.column: f for f in scan_table(table)}
+    assert by_col["notes"].strategy == "scrub:also=full_name"
