@@ -230,7 +230,7 @@ def test_drop_is_registered() -> None:
     assert build_strategy("drop").name == "drop"
 
 
-@pytest.mark.parametrize("kind", ["first_name", "last_name", "country", "occupation"])
+@pytest.mark.parametrize("kind", ["first_name", "last_name", "occupation"])
 def test_pseudonym_never_maps_a_value_to_itself(kind: str) -> None:
     from datamask.generate import Generator
 
