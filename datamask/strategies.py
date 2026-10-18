@@ -23,6 +23,7 @@ from typing import Any, ClassVar
 
 from .errors import DatamaskError
 from .generate import ALL_FIELDS, Generator
+from .patterns import KINDS, scrub_text
 
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
@@ -103,6 +104,14 @@ class Redact(Strategy):
         return self.options["text"]
 
 
+class Drop(Strategy):
+    name = "drop"
+    summary = "remove the column from the output"
+
+    def apply(self, value: Any, ctx: Context) -> Any:
+        return None
+
+
 class Hash(Strategy):
     name = "hash"
     summary = "salted HMAC-SHA256, hex, truncated (joinable, not reversible without the salt)"
@@ -164,6 +173,25 @@ class Email(Strategy):
         shown = local[:keep] if len(local) > keep else ""
         masked = shown + self.options["char"] * max(len(local) - len(shown), 3)
         return f"{masked}@{domain if self.options['keep_domain'] else 'masked.invalid'}"
+
+
+class Scrub(Strategy):
+    name = "scrub"
+    summary = "keep free text but replace emails, IPs, cards, IBANs and phones with tokens"
+    params = {"kinds": (str, "+".join(KINDS))}
+
+    def validate(self) -> None:
+        wanted = [k for k in self.options["kinds"].split("+") if k]
+        bad = [k for k in wanted if k not in KINDS]
+        if bad or not wanted:
+            raise DatamaskError(
+                f"scrub: kinds must be a '+'-joined subset of {'+'.join(KINDS)}"
+                + (f" (got {', '.join(bad)})" if bad else "")
+            )
+        self.options["kinds"] = "+".join(wanted)
+
+    def apply(self, value: Any, ctx: Context) -> Any:
+        return scrub_text(text_of(value), tuple(self.options["kinds"].split("+")))
 
 
 class Pseudonym(Strategy):
@@ -318,8 +346,10 @@ class Shuffle(Strategy):
         return shuffled
 
 
-_TYPES = (Keep, Nullify, Redact, Hash, Partial, Email, Pseudonym, DateGeneralize, Bucket,
-          Prefix, Subnet, Noise, Shuffle)
+_TYPES = (
+    Keep, Drop, Nullify, Redact, Scrub, Hash, Partial, Email, Pseudonym, DateGeneralize,
+    Bucket, Prefix, Subnet, Noise, Shuffle,
+)
 REGISTRY: dict[str, type[Strategy]] = {cls.name: cls for cls in _TYPES}
 
 
