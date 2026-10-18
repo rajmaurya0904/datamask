@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -13,13 +12,12 @@ from .tableio import Table
 
 MIN_VALUE_LENGTH = 4
 SUBSTRING_MIN_LENGTH = 6
-SUBSTRING_PATTERN_CAP = 2000
 MAX_LOCATIONS = 20
 
 
 @dataclass
 class Leak:
-    kind: str  # "unchanged" (same cell) or "reappears" (original value found elsewhere)
+    kind: str  # "unchanged" (same cell) or "reappears" (own value found in another column)
     source_column: str
     output_column: str
     data_row: int  # 1-based, header not counted
@@ -45,10 +43,15 @@ def check_leaks(
     columns: Iterable[str],
     min_length: int = MIN_VALUE_LENGTH,
 ) -> LeakReport:
-    """Look for original values of ``columns`` anywhere in the masked table.
+    """Look for each row's own original values of ``columns`` in the same masked row.
 
-    Values shorter than ``min_length`` are ignored because short strings ("Yes", "42")
-    occur by chance. Rows are compared by position, so both tables must keep row order.
+    A value counts as surviving if its masked cell is identical (``unchanged``) or if it
+    appears whole, or as a substring when it has at least ``SUBSTRING_MIN_LENGTH``
+    characters, inside another cell of the same row (``reappears``), which is how a name
+    typically leaks through a free-text column. Comparison ignores case. Values shorter
+    than ``min_length`` are skipped because short strings occur by chance. Rows are
+    compared by position, so both tables must keep their row order. A value that merely
+    equals some *other* person's original value is not a leak and is not reported.
     """
     wanted = list(dict.fromkeys(columns))
     missing = [c for c in wanted if c not in original.columns]
@@ -60,53 +63,35 @@ def check_leaks(
             "verify compares rows by position"
         )
     report = LeakReport(checked_columns=wanted)
-    sensitive: dict[str, set[str]] = {}
-    for column in wanted:
-        values = {
-            text_of(v) for v in original.column(column)
-            if not is_empty(v) and len(text_of(v)) >= min_length
-        }
-        sensitive[column] = values
-        report.values_checked += len(values)
-
-    owner: dict[str, str] = {}
-    for column, values in sensitive.items():
-        for value in values:
-            owner.setdefault(value, column)
-
-    long_values = sorted(
-        (v for v in owner if len(v) >= SUBSTRING_MIN_LENGTH), key=len, reverse=True
-    )
-    pattern: re.Pattern[str] | None = None
-    if len(long_values) > SUBSTRING_PATTERN_CAP:
-        report.notes.append(
-            f"substring search covered only the {SUBSTRING_PATTERN_CAP} longest of "
-            f"{len(long_values)} distinct values; exact-cell matching covered all of them"
-        )
-        long_values = long_values[:SUBSTRING_PATTERN_CAP]
-    if long_values:
-        pattern = re.compile("|".join(re.escape(v) for v in long_values))
-
     for index, (before, after) in enumerate(zip(original.rows, masked.rows, strict=True), start=1):
-        for out_col in masked.columns:
-            cell = after.get(out_col)
-            if is_empty(cell):
+        out_text = {
+            col: text_of(after[col]).casefold()
+            for col in masked.columns
+            if col in after and not is_empty(after[col])
+        }
+        for source in wanted:
+            raw = before.get(source)
+            if is_empty(raw) or len(text_of(raw)) < min_length:
                 continue
-            text = text_of(cell)
-            source = owner.get(text)
-            if source is None and pattern is not None:
-                hit = pattern.search(text)
-                source = owner.get(hit.group()) if hit else None
-            if source is None:
-                continue
-            same_cell = out_col == source and text_of(before.get(source)) == text
-            if same_cell:
-                report.unchanged += 1
-            else:
-                report.reappearing += 1
-            if len(report.leaks) < MAX_LOCATIONS:
-                kind = "unchanged" if same_cell else "reappears"
-                report.leaks.append(Leak(kind, source, out_col, index))
+            needle = text_of(raw).casefold()
+            report.values_checked += 1
+            for out_col, cell in out_text.items():
+                same_cell = out_col == source
+                if same_cell:
+                    hit = cell == needle
+                else:
+                    hit = cell == needle or (
+                        len(needle) >= SUBSTRING_MIN_LENGTH and needle in cell
+                    )
+                if not hit:
+                    continue
+                if same_cell:
+                    report.unchanged += 1
+                else:
+                    report.reappearing += 1
+                if len(report.leaks) < MAX_LOCATIONS:
+                    kind = "unchanged" if same_cell else "reappears"
+                    report.leaks.append(Leak(kind, source, out_col, index))
     return report
 
 
