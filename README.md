@@ -78,7 +78,7 @@ Rules can also be given inline and repeated, for example `-r phone=partial:keep_
 
 ## How it works
 
-- `generate` builds rows from built-in name, address, phone, IBAN and card tables for en, de and fr locales. Card numbers pass Luhn, IBANs pass mod-97, phone numbers use reserved fictional ranges, and email domains are reserved example domains. A seed makes the output repeatable.
+- `generate` builds rows from built-in name, address, phone, IBAN and card tables for en, de and fr locales. Card numbers pass Luhn, IBANs pass mod-97, en phone numbers use the UK drama range 07700 900xxx (de and fr numbers are made-up and may belong to real subscribers), and email domains are reserved example domains. A seed makes the output repeatable.
 - `scan` scores each column from its header name and from what its values look like (emails, phones, dates, IPs, card numbers that pass Luhn, IBANs and so on) and suggests a strategy per column.
 - `mask` applies one strategy per column. `hash` and `pseudonym` are keyed with a secret salt so the same input always gives the same output, which keeps joins between tables working. The salt comes from a file, an environment variable or the config, never the command line.
 - Values a strategy cannot handle become empty cells (or abort with `--on-error fail`) and are counted in the summary, so nothing passes through unmasked by accident.
